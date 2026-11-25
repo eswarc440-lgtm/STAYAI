@@ -1,0 +1,551 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'eswarc440@gmail.com'
+      );
+    }
+
+    function isManagerRole() {
+      return isVerifiedUser() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager';
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'phone', 'city', 'role', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 24))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 80))
+        && data.role in ['customer', 'manager', 'admin']
+        && data.status in ['active', 'suspended']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProperty(data) {
+      return data.keys().hasAll(['id', 'managerId', 'name', 'city', 'state', 'dataSource', 'verificationStatus', 'bookable', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'managerId', 'name', 'city', 'state', 'locality', 'category', 'gstNumber', 'description', 'startingRateInr', 'dataSource', 'verificationStatus', 'bookable', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.managerId)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 160
+        && data.city is string && data.city.size() >= 2 && data.city.size() <= 80
+        && data.state is string && data.state.size() >= 2 && data.state.size() <= 80
+        && (!('locality' in data) || (data.locality is string && data.locality.size() <= 120))
+        && (!('category' in data) || (data.category is string && data.category.size() <= 60))
+        && (!('gstNumber' in data) || (data.gstNumber is string && data.gstNumber.size() <= 15))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 2000))
+        && (!('startingRateInr' in data) || (data.startingRateInr is number && data.startingRateInr >= 500 && data.startingRateInr <= 500000))
+        && data.dataSource in ['demo', 'direct']
+        && data.verificationStatus in ['demo_unverified', 'pending_review', 'verified', 'suspended']
+        && data.bookable is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRoom(data) {
+      return data.keys().hasAll(['id', 'propertyId', 'managerId', 'name', 'maxGuests', 'nightlyRateInr', 'totalUnits', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'propertyId', 'managerId', 'name', 'bedConfig', 'maxGuests', 'nightlyRateInr', 'totalUnits', 'createdAt', 'updatedAt'])
+        && isValidId(data.id)
+        && isValidId(data.propertyId)
+        && isValidId(data.managerId)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && (!('bedConfig' in data) || (data.bedConfig is string && data.bedConfig.size() <= 120))
+        && data.maxGuests is int && data.maxGuests >= 1 && data.maxGuests <= 10
+        && data.nightlyRateInr is number && data.nightlyRateInr >= 500 && data.nightlyRateInr <= 500000
+        && data.totalUnits is int && data.totalUnits >= 1 && data.totalUnits <= 200
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAvailability(data) {
+      return data.keys().hasAll(['propertyId', 'roomId', 'managerId', 'date', 'totalUnits', 'bookedUnits', 'heldUnits', 'isBlocked', 'updatedAt'])
+        && data.keys().hasOnly(['propertyId', 'roomId', 'managerId', 'date', 'totalUnits', 'bookedUnits', 'heldUnits', 'isBlocked', 'updatedAt'])
+        && isValidId(data.propertyId)
+        && isValidId(data.roomId)
+        && isValidId(data.managerId)
+        && data.date is string && data.date.size() == 10
+        && data.totalUnits is int && data.totalUnits >= 0 && data.totalUnits <= 200
+        && data.bookedUnits is int && data.bookedUnits >= 0
+        && data.heldUnits is int && data.heldUnits >= 0
+        && data.isBlocked is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFavorite(data) {
+      return data.keys().hasAll(['userId', 'propertyId', 'propertyName', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'propertyId', 'propertyName', 'createdAt'])
+        && isValidId(data.userId)
+        && isValidId(data.propertyId)
+        && data.propertyName is string && data.propertyName.size() >= 1 && data.propertyName.size() <= 160
+        && data.createdAt is timestamp;
+    }
+
+    function isValidRecentView(data) {
+      return data.keys().hasAll(['userId', 'propertyId', 'viewedAt'])
+        && data.keys().hasOnly(['userId', 'propertyId', 'viewedAt'])
+        && isValidId(data.userId)
+        && isValidId(data.propertyId)
+        && data.viewedAt is timestamp;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['userId', 'propertyId', 'managerId', 'rating', 'title', 'comment', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'propertyId', 'managerId', 'rating', 'title', 'comment', 'managerReplyText', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && isValidId(data.propertyId)
+        && isValidId(data.managerId)
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 140
+        && data.comment is string && data.comment.size() >= 10 && data.comment.size() <= 1500
+        && (!('managerReplyText' in data) || (data.managerReplyText is string && data.managerReplyText.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'category', 'title', 'message', 'read', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'category', 'title', 'message', 'read', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 40
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 600
+        && data.read is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPromotion(data) {
+      return data.keys().hasAll(['propertyId', 'managerId', 'code', 'title', 'discountValue', 'active', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['propertyId', 'managerId', 'code', 'title', 'discountValue', 'active', 'createdAt', 'updatedAt'])
+        && isValidId(data.propertyId)
+        && isValidId(data.managerId)
+        && data.code is string && data.code.size() >= 4 && data.code.size() <= 20
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 120
+        && data.discountValue is number && data.discountValue >= 1 && data.discountValue <= 100000
+        && data.active is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStaff(data) {
+      return data.keys().hasAll(['propertyId', 'managerId', 'name', 'email', 'department', 'createdAt'])
+        && data.keys().hasOnly(['propertyId', 'managerId', 'name', 'email', 'department', 'createdAt'])
+        && isValidId(data.propertyId)
+        && isValidId(data.managerId)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.department is string && data.department.size() >= 2 && data.department.size() <= 60
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSupportTicket(data) {
+      return data.keys().hasAll(['userId', 'category', 'subject', 'message', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'category', 'subject', 'message', 'status', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.category is string && data.category.size() >= 2 && data.category.size() <= 60
+        && data.subject is string && data.subject.size() >= 5 && data.subject.size() <= 160
+        && data.message is string && data.message.size() >= 10 && data.message.size() <= 2000
+        && data.status in ['open', 'in_review', 'resolved']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPlatformSetting(data) {
+      return data.keys().hasAll(['defaultCommissionPercent', 'luxuryCommissionPercent', 'inventoryHoldMinutes', 'updatedAt'])
+        && data.keys().hasOnly(['defaultCommissionPercent', 'luxuryCommissionPercent', 'inventoryHoldMinutes', 'updatedAt'])
+        && data.defaultCommissionPercent is number && data.defaultCommissionPercent >= 0 && data.defaultCommissionPercent <= 30
+        && data.luxuryCommissionPercent is number && data.luxuryCommissionPercent >= 0 && data.luxuryCommissionPercent <= 30
+        && data.inventoryHoldMinutes is int && data.inventoryHoldMinutes >= 5 && data.inventoryHoldMinutes <= 30
+        && data.updatedAt is timestamp;
+    }
+
+    // --- Collection Rules ---
+
+    // Startup connection check document (read-only ping)
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // Trusted Admin Allowlist (Admin-only read/write)
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && (isAdmin() || (isSignedIn() && request.auth.uid == adminId));
+      allow list, create, update, delete: if isAdmin();
+    }
+
+    // Users (PII isolated to owner or admin; zero client role escalation)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().role == 'customer'
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            request.auth.uid == userId
+            && incoming().role == existing().role
+            && incoming().status == existing().status
+            && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'phone', 'city', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+    }
+
+    // Properties (Public reads verified listings; managers own drafts; admins verify)
+    match /properties/{propertyId} {
+      allow get: if isValidId(propertyId) && (
+        existing().verificationStatus == 'verified' ||
+        (isSignedIn() && existing().managerId == request.auth.uid) ||
+        isAdmin()
+      );
+      allow list: if resource.data.verificationStatus == 'verified'
+        || (isSignedIn() && resource.data.managerId == request.auth.uid)
+        || isAdmin();
+      allow create: if isVerifiedUser()
+        && isValidId(propertyId)
+        && isValidProperty(incoming())
+        && incoming().id == propertyId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && incoming().managerId == request.auth.uid
+            && incoming().verificationStatus == 'pending_review'
+            && incoming().bookable == false
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(propertyId)
+        && isValidProperty(incoming())
+        && incoming().id == existing().id
+        && incoming().managerId == existing().managerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && existing().managerId == request.auth.uid
+            && incoming().verificationStatus == existing().verificationStatus
+            && incoming().bookable == existing().bookable
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'locality', 'description', 'startingRateInr', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(propertyId);
+    }
+
+    // Rooms (Scoped to property manager or admin)
+    match /rooms/{roomId} {
+      allow get: if isValidId(roomId);
+      allow list: if true;
+      allow create: if isVerifiedUser()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && incoming().id == roomId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/properties/$(incoming().propertyId))
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && incoming().managerId == request.auth.uid
+            && get(/databases/$(database)/documents/properties/$(incoming().propertyId)).data.managerId == request.auth.uid
+          )
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(roomId)
+        && isValidRoom(incoming())
+        && incoming().id == existing().id
+        && incoming().propertyId == existing().propertyId
+        && incoming().managerId == existing().managerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && existing().managerId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'bedConfig', 'maxGuests', 'nightlyRateInr', 'totalUnits', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(roomId);
+    }
+
+    // Availability (Manager-scoped stop-sell; booked/held units server-authoritative)
+    match /availability/{availabilityId} {
+      allow get: if isValidId(availabilityId) && isSignedIn() && (existing().managerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.managerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(availabilityId)
+        && isValidAvailability(incoming())
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (isManagerRole() && incoming().managerId == request.auth.uid && incoming().bookedUnits == 0 && incoming().heldUnits == 0)
+        );
+      allow update: if isVerifiedUser()
+        && isValidId(availabilityId)
+        && isValidAvailability(incoming())
+        && incoming().propertyId == existing().propertyId
+        && incoming().roomId == existing().roomId
+        && incoming().managerId == existing().managerId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && existing().managerId == request.auth.uid
+            && incoming().bookedUnits == existing().bookedUnits
+            && incoming().heldUnits == existing().heldUnits
+            && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'totalUnits', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(availabilityId);
+    }
+
+    // Bookings (Strictly server-authoritative writes; owner/manager/admin read)
+    match /bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && isSignedIn() && (
+        existing().userId == request.auth.uid ||
+        existing().managerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.managerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create, update, delete: if false;
+    }
+
+    // Payments (Server-only writes; owner or admin read)
+    match /payments/{paymentId} {
+      allow get: if isValidId(paymentId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    // Payment Webhooks (Admin read only; server-only write)
+    match /payment_webhooks/{eventId} {
+      allow get: if isValidId(eventId) && isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Refunds (Owner or admin read; server-only write)
+    match /refunds/{refundId} {
+      allow get: if isValidId(refundId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    // Favorites (Strictly owner-scoped)
+    match /favorites/{favoriteId} {
+      allow get: if isValidId(favoriteId) && isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(favoriteId)
+        && isValidFavorite(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(favoriteId) && existing().userId == request.auth.uid;
+    }
+
+    // Recently Viewed (Strictly owner-scoped)
+    match /recentViews/{viewId} {
+      allow get: if isValidId(viewId) && isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(viewId)
+        && isValidRecentView(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().viewedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(viewId)
+        && isValidRecentView(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().propertyId == existing().propertyId
+        && incoming().viewedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['viewedAt']);
+      allow delete: if isVerifiedUser() && isValidId(viewId) && existing().userId == request.auth.uid;
+    }
+
+    // Reviews (Public read; verified author create; property manager may reply only)
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId);
+      allow list: if true;
+      allow create: if isVerifiedUser()
+        && isValidId(reviewId)
+        && isValidReview(incoming())
+        && incoming().userId == request.auth.uid
+        && !('managerReplyText' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(reviewId)
+        && isValidReview(incoming())
+        && incoming().userId == existing().userId
+        && incoming().propertyId == existing().propertyId
+        && incoming().managerId == existing().managerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && existing().managerId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['managerReplyText', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(reviewId);
+    }
+
+    // Notifications (Owner read & mark-read only)
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAdmin() && isValidId(notificationId) && isValidNotification(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(notificationId)
+        && isValidNotification(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(notificationId);
+    }
+
+    // Promotions (Manager-owned CRUD)
+    match /promotions/{promotionId} {
+      allow get: if isValidId(promotionId) && isSignedIn() && (existing().managerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.managerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(promotionId)
+        && isValidPromotion(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (isManagerRole() && incoming().managerId == request.auth.uid));
+      allow update: if isVerifiedUser()
+        && isValidId(promotionId)
+        && isValidPromotion(incoming())
+        && incoming().propertyId == existing().propertyId
+        && incoming().managerId == existing().managerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() ||
+          (
+            isManagerRole()
+            && existing().managerId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'discountValue', 'active', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(promotionId);
+    }
+
+    // Staff (Manager-owned)
+    match /staff/{staffId} {
+      allow get: if isValidId(staffId) && isSignedIn() && (existing().managerId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.managerId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(staffId)
+        && isValidStaff(incoming())
+        && incoming().createdAt == request.time
+        && (isAdmin() || (isManagerRole() && incoming().managerId == request.auth.uid));
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(staffId) && (existing().managerId == request.auth.uid || isAdmin());
+    }
+
+    // Audit Logs (Admin read only; immutable append-only)
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // Support Tickets (Owner creates/reads own; admin triages & updates status)
+    match /supportTickets/{ticketId} {
+      allow get: if isValidId(ticketId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser()
+        && isValidId(ticketId)
+        && isValidSupportTicket(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().status == 'open'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && isValidId(ticketId)
+        && isValidSupportTicket(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existing().status != 'resolved'
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isAdmin() && isValidId(ticketId);
+    }
+
+    // Platform Settings (Admin only)
+    match /platformSettings/{settingId} {
+      allow get: if isValidId(settingId) && isAdmin();
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(settingId)
+        && isValidPlatformSetting(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if false;
+    }
+  }
+}

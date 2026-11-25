@@ -1,0 +1,292 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated StayAI user profile with server-assigned role and PII isolation.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "phone": { "type": "string", "maxLength": 24 },
+        "city": { "type": "string", "maxLength": 80 },
+        "role": { "type": "string", "enum": ["customer", "manager", "admin"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "status", "createdAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted allowlist document granting platform administrator privileges.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "grantedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "grantedAt"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "Direct hotel property managed by an assigned hotel manager and verified by an admin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 2, "maxLength": 160 },
+        "city": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "state": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "locality": { "type": "string", "maxLength": 120 },
+        "category": { "type": "string", "maxLength": 60 },
+        "gstNumber": { "type": "string", "maxLength": 15 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "startingRateInr": { "type": "number" },
+        "dataSource": { "type": "string", "enum": ["demo", "direct"] },
+        "verificationStatus": { "type": "string", "enum": ["demo_unverified", "pending_review", "verified", "suspended"] },
+        "bookable": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "managerId", "name", "city", "state", "dataSource", "verificationStatus", "bookable", "createdAt", "updatedAt"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Room type belonging to a direct property.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "bedConfig": { "type": "string", "maxLength": 120 },
+        "maxGuests": { "type": "integer" },
+        "nightlyRateInr": { "type": "number" },
+        "totalUnits": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "propertyId", "managerId", "name", "maxGuests", "nightlyRateInr", "totalUnits", "createdAt", "updatedAt"]
+    },
+    "Availability": {
+      "title": "Availability",
+      "description": "Per-day room unit stock and stop-sell state.",
+      "type": "object",
+      "properties": {
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "roomId": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 10 },
+        "totalUnits": { "type": "integer" },
+        "bookedUnits": { "type": "integer" },
+        "heldUnits": { "type": "integer" },
+        "isBlocked": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyId", "roomId", "managerId", "date", "totalUnits", "bookedUnits", "heldUnits", "isBlocked", "updatedAt"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Server-authoritative hotel booking record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "roomId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["hold_active", "payment_pending", "confirmed", "cancelled", "expired", "refund_pending", "refunded", "failed_compensation_needed"] },
+        "totalAmountInr": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "managerId", "propertyId", "roomId", "status", "totalAmountInr", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Server-verified Razorpay payment ledger entry (never stores card/CVV/UPI PIN).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "amountInr": { "type": "number" },
+        "status": { "type": "string", "enum": ["created", "pending", "captured", "failed", "expired", "partially_refunded", "refunded"] },
+        "verifiedServerSide": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "userId", "amountInr", "status", "verifiedServerSide", "createdAt"]
+    },
+    "PaymentWebhook": {
+      "title": "PaymentWebhook",
+      "description": "Server-only deduplicated Razorpay webhook event log.",
+      "type": "object",
+      "properties": {
+        "providerEventId": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "maxLength": 80 },
+        "signatureVerified": { "type": "boolean" },
+        "processedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["providerEventId", "eventType", "signatureVerified", "processedAt"]
+    },
+    "Refund": {
+      "title": "Refund",
+      "description": "Server-managed refund and compensation record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "bookingId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "amountInr": { "type": "number" },
+        "status": { "type": "string", "enum": ["requested", "processing", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "bookingId", "userId", "amountInr", "status", "createdAt"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "User-saved stay shortlist item.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "propertyName": { "type": "string", "maxLength": 160 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "propertyName", "createdAt"]
+    },
+    "RecentView": {
+      "title": "RecentView",
+      "description": "User's recently viewed hotel entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "viewedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "viewedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Guest stay review with optional manager reply.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "rating": { "type": "number" },
+        "title": { "type": "string", "minLength": 3, "maxLength": 140 },
+        "comment": { "type": "string", "minLength": 10, "maxLength": 1500 },
+        "managerReplyText": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "propertyId", "managerId", "rating", "title", "comment", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app notification scoped strictly to recipient user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 40 },
+        "title": { "type": "string", "maxLength": 140 },
+        "message": { "type": "string", "maxLength": 600 },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "category", "title", "message", "read", "createdAt", "updatedAt"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "Property-level discount code managed by property owner.",
+      "type": "object",
+      "properties": {
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "minLength": 4, "maxLength": 20 },
+        "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "discountValue": { "type": "number" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyId", "managerId", "code", "title", "discountValue", "active", "createdAt", "updatedAt"]
+    },
+    "Staff": {
+      "title": "Staff",
+      "description": "Manager-scoped property staff record.",
+      "type": "object",
+      "properties": {
+        "propertyId": { "type": "string", "maxLength": 128 },
+        "managerId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "department": { "type": "string", "maxLength": 60 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyId", "managerId", "name", "email", "department", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Append-only admin/server audit trail.",
+      "type": "object",
+      "properties": {
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "action": { "type": "string", "maxLength": 80 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "details": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorUid", "action", "targetId", "details", "createdAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Customer support or complaint ticket.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "category": { "type": "string", "maxLength": 60 },
+        "subject": { "type": "string", "minLength": 5, "maxLength": 160 },
+        "message": { "type": "string", "minLength": 10, "maxLength": 2000 },
+        "status": { "type": "string", "enum": ["open", "in_review", "resolved"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "category", "subject", "message", "status", "createdAt", "updatedAt"]
+    },
+    "PlatformSetting": {
+      "title": "PlatformSetting",
+      "description": "Admin-managed commercial commission and feature flag settings.",
+      "type": "object",
+      "properties": {
+        "defaultCommissionPercent": { "type": "number" },
+        "luxuryCommissionPercent": { "type": "number" },
+        "inventoryHoldMinutes": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["defaultCommissionPercent", "luxuryCommissionPercent", "inventoryHoldMinutes", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": { "$ref": "#/entities/User" }, "description": "User profiles strictly isolated to owner or admin." },
+    "/admins/{adminId}": { "schema": { "$ref": "#/entities/AdminRecord" }, "description": "Trusted admin allowlist." },
+    "/properties/{propertyId}": { "schema": { "$ref": "#/entities/Property" }, "description": "Direct hotel properties." },
+    "/rooms/{roomId}": { "schema": { "$ref": "#/entities/Room" }, "description": "Room types linked to properties." },
+    "/availability/{availabilityId}": { "schema": { "$ref": "#/entities/Availability" }, "description": "Daily availability records." },
+    "/bookings/{bookingId}": { "schema": { "$ref": "#/entities/Booking" }, "description": "Booking records." },
+    "/payments/{paymentId}": { "schema": { "$ref": "#/entities/Payment" }, "description": "Server-verified payment records." },
+    "/payment_webhooks/{eventId}": { "schema": { "$ref": "#/entities/PaymentWebhook" }, "description": "Server-only Razorpay webhook deduplication log." },
+    "/refunds/{refundId}": { "schema": { "$ref": "#/entities/Refund" }, "description": "Refund records." },
+    "/favorites/{favoriteId}": { "schema": { "$ref": "#/entities/Favorite" }, "description": "User saved stays." },
+    "/recentViews/{viewId}": { "schema": { "$ref": "#/entities/RecentView" }, "description": "User recently viewed stays." },
+    "/reviews/{reviewId}": { "schema": { "$ref": "#/entities/Review" }, "description": "Guest stay reviews." },
+    "/notifications/{notificationId}": { "schema": { "$ref": "#/entities/Notification" }, "description": "User in-app notifications." },
+    "/promotions/{promotionId}": { "schema": { "$ref": "#/entities/Promotion" }, "description": "Property promo codes." },
+    "/staff/{staffId}": { "schema": { "$ref": "#/entities/Staff" }, "description": "Property staff directory." },
+    "/auditLogs/{logId}": { "schema": { "$ref": "#/entities/AuditLog" }, "description": "Immutable platform audit trail." },
+    "/supportTickets/{ticketId}": { "schema": { "$ref": "#/entities/SupportTicket" }, "description": "Customer support tickets." },
+    "/platformSettings/{settingId}": { "schema": { "$ref": "#/entities/PlatformSetting" }, "description": "Global platform configuration." }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "StayAI",
+  "description": "AI-powered hotel discovery and transparent booking platform for India.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
